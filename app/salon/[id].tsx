@@ -207,10 +207,7 @@ export default function SalonDetailScreen() {
     );
   }
 
-  const imageUri = salon.cover_image_url || salon.image_url || (salon.photos && salon.photos[0]) || 'https://via.placeholder.com/600x400';
-  const finalImageUri = typeof imageUri === 'string' 
-    ? `${imageUri}${imageUri.includes('?') ? '&' : '?'}v=${Date.now()}` 
-    : imageUri;
+  const finalImageUri = salon.cover_image_url || salon.image_url || (salon.photos && salon.photos[0]) || 'https://via.placeholder.com/600x400';
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>

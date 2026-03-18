@@ -257,7 +257,7 @@ export default function SalonManagementScreen() {
             } as any);
             
             // On force l'URL finale avec un breaker pour tuer le cache
-            const finalUrl = `${url}${url.includes('?') ? '&' : '?'}upd=${Date.now()}`;
+            const finalUrl = url;
             setCoverPhoto(finalUrl);
             Alert.alert('Succès', 'La photo de votre salon a été mise à jour !');
           } catch (e) {

@@ -4,17 +4,30 @@
  */
 
 import * as AppleAuthentication from 'expo-apple-authentication';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { Profile, ProfileUpdate } from '@/types/database';
 import { Platform } from 'react-native';
 
+// Import GoogleSignin de maniere securisee pour Expo Go
+let GoogleSignin: any = null;
+try {
+  // @ts-ignore
+  const GoogleModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = GoogleModule.GoogleSignin;
+} catch (e) {
+  if (__DEV__) console.warn('Google Sign-in non disponible (probablement Expo Go)');
+}
+
 // Configuration Google Sign-In (À mettre à jour avec vos IDs réels)
-if (Platform.OS !== 'web') {
-  GoogleSignin.configure({
-    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID, // Obtenu dans Google Cloud Console
-    offlineAccess: true,
-  });
+if (Platform.OS !== 'web' && GoogleSignin) {
+  try {
+    GoogleSignin.configure({
+      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID, // Obtenu dans Google Cloud Console
+      offlineAccess: true,
+    });
+  } catch (e) {
+    if (__DEV__) console.warn('Erreur de configuration Google Sign-in:', e);
+  }
 }
 
 // Verifier si Supabase est configure avant toute operation
@@ -576,6 +589,9 @@ export const authService = {
     checkSupabaseConfig();
 
     if (Platform.OS !== 'web') {
+      if (!GoogleSignin) {
+        throw new Error('Google Sign-in n\'est pas disponible dans cet environnement (utilisez un build de développement)');
+      }
       try {
         await GoogleSignin.hasPlayServices();
         const userInfo = await GoogleSignin.signIn();

@@ -75,9 +75,8 @@ export function SalonCard({ salon, variant = 'default', onFavoritePress, isFavor
   const availability = getAvailabilityBadge();
   const imageSource = salon.service_image || salon.image_url || 'https://via.placeholder.com/400x300';
   
-  // Ajouter un cache breaker si c'est une URL
   const finalSource = typeof imageSource === 'string' 
-    ? { uri: `${imageSource}${imageSource.includes('?') ? '&' : '?'}v=${Date.now()}` } 
+    ? { uri: imageSource } 
     : imageSource;
 
   // Ajustement des dimensions selon le variant

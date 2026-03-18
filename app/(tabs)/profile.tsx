@@ -209,11 +209,9 @@ export default function ProfileScreen() {
         >
           <TouchableOpacity onPress={handlePickImage} style={styles.avatarContainer}>
             <Image 
-              key={`profile-avatar-${profile?.avatar_url}`}
-              source={{ uri: profile?.avatar_url ? `${profile.avatar_url}${profile.avatar_url.includes('?') ? '&' : '?'}v=${Date.now()}` : 'https://via.placeholder.com/150' }} 
+              source={{ uri: profile?.avatar_url || 'https://via.placeholder.com/150' }} 
               style={styles.avatar} 
               contentFit="cover"
-              cachePolicy="none"
               placeholder={require('@/assets/images/logo_afroplan.png')}
             />
             <View style={[styles.editBadge, { backgroundColor: colors.primary }]}>

@@ -344,11 +344,9 @@ export default function CoiffeurProfilScreen() {
           <View style={styles.avatarWrapper}>
             {profile?.avatar_url && !imageError ? (
               <Image
-                key={`coiffeur-avatar-${profile?.avatar_url}`}
-                source={{ uri: `${profile.avatar_url}${profile.avatar_url.includes('?') ? '&' : '?'}v=${Date.now()}` }}
+                source={{ uri: profile.avatar_url }}
                 style={styles.avatar}
                 contentFit="cover"
-                cachePolicy="none"
                 onError={() => setImageError(true)}
               />
             ) : (
