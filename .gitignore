@@ -1,0 +1,69 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Expo
+.expo/
+dist/
+web-build/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# Environment variables
+# IL EST FORTEMENT RECOMMANDÉ D'IGNORER TOUS LES FICHIERS .ENV
+# Utilisez les "Secrets" dans le tableau de bord Expo (EAS) pour la Prod/Preview.
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+*.pem
+.gemini
+# Local
+*.local
+./expo
+# TypeScript
+*.tsbuildinfo
+
+# Testing
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Temporary files
+*.log
+tmp/
+temp/
+
+# Documents et Assets personnels (à garder en local ou sur Cloud)
+*.pdf
+AFROPLAN_charte_graphique.pdf
+assets/filtre/WhatsApp*
+
+# Supabase
+supabase/.temp/
+supabase/.storage/
+supabase/functions/.import_map.json
+
+# Google Service Account (secrets)
+google-service-account.json
+
+# EAS Build & Expo
+.eas/
+eas-build-pre-install.sh
+.expo-shared/
+
+# @generated expo-cli
+expo-env.d.ts
+# @end expo-cli

@@ -1,0 +1,145 @@
+/**
+ * Hook pour la gestion des favoris
+ */
+
+import { useState, useEffect, useCallback } from 'react';
+import { favoriteService, favoriteStyleService } from '@/services';
+import { Salon } from '@/types';
+
+export function useFavorites(userId: string) {
+  const [favorites, setFavorites] = useState<Salon[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchFavorites = useCallback(async () => {
+    if (!userId) {
+      setFavorites([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await favoriteService.getUserFavorites(userId);
+      setFavorites(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchFavorites();
+  }, [fetchFavorites]);
+
+  const removeFavorite = async (salonId: string) => {
+    try {
+      await favoriteService.removeFavorite(userId, salonId);
+      setFavorites((prev) => prev.filter((s) => s.id !== salonId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+      throw err;
+    }
+  };
+
+  return { favorites, isLoading, error, refresh: fetchFavorites, removeFavorite };
+}
+
+export function useFavorite(userId: string, salonId: string) {
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isToggling, setIsToggling] = useState(false);
+
+  useEffect(() => {
+    const checkFavorite = async () => {
+      // Validation du format UUID pour éviter les crashs avec les IDs de test "1", "2", etc.
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+      if (!userId || !salonId || !uuidRegex.test(salonId)) {
+        setIsFavorite(false);
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        const result = await favoriteService.isFavorite(userId, salonId);
+        setIsFavorite(result);
+      } catch (err) {
+        console.error('Erreur lors de la verification du favori:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkFavorite();
+  }, [userId, salonId]);
+
+  const toggle = async () => {
+    if (!userId || !salonId || isToggling) return;
+
+    setIsToggling(true);
+    try {
+      const newState = await favoriteService.toggleFavorite(userId, salonId);
+      setIsFavorite(newState);
+      return newState;
+    } catch (err) {
+      console.error('Erreur lors du toggle du favori:', err);
+      throw err;
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
+  return { isFavorite, isLoading, isToggling, toggleFavorite: toggle };
+}
+
+export function useFavoriteStyles(userId: string) {
+  const [favoriteStyleIds, setFavoriteStyleIds] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchFavoriteStyles = useCallback(async () => {
+    if (!userId) {
+      setFavoriteStyleIds([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const data = await favoriteStyleService.getUserFavoriteStyles(userId);
+      setFavoriteStyleIds(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Une erreur est survenue');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => {
+    fetchFavoriteStyles();
+  }, [fetchFavoriteStyles]);
+
+  const toggleFavoriteStyle = async (styleId: string) => {
+    if (!userId) return;
+    try {
+      const isNowFav = await favoriteStyleService.toggleFavoriteStyle(userId, styleId);
+      if (isNowFav) {
+        setFavoriteStyleIds(prev => [...prev, styleId]);
+      } else {
+        setFavoriteStyleIds(prev => prev.filter(id => id !== styleId));
+      }
+      return isNowFav;
+    } catch (err) {
+      console.error('Erreur lors du toggle du style favori:', err);
+      throw err;
+    }
+  };
+
+  return { favoriteStyleIds, isLoading, error, refresh: fetchFavoriteStyles, toggleFavoriteStyle };
+}

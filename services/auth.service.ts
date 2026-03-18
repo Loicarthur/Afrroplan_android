@@ -1,0 +1,713 @@
+/**
+ * Service d'authentification avec Supabase
+ * Gere l'inscription, la connexion et la gestion des profils
+ */
+
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
+import { Profile, ProfileUpdate } from '@/types/database';
+import { Platform } from 'react-native';
+
+// Configuration Google Sign-In (À mettre à jour avec vos IDs réels)
+if (Platform.OS !== 'web') {
+  GoogleSignin.configure({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID, // Obtenu dans Google Cloud Console
+    offlineAccess: true,
+  });
+}
+
+// Verifier si Supabase est configure avant toute operation
+const checkSupabaseConfig = () => {
+  if (!isSupabaseConfigured()) {
+    throw new Error(
+      'Supabase non configure. Veuillez creer un fichier .env avec vos identifiants Supabase. ' +
+      'Consultez .env.example pour le format.'
+    );
+  }
+};
+
+// ============================================
+// TYPES POUR L'AUTHENTIFICATION
+// ============================================
+
+export type SignUpParams = {
+  email: string;
+  password: string;
+  fullName: string;
+  phone?: string;
+  role?: 'client' | 'coiffeur';
+};
+
+export type SignInParams = {
+  email: string;
+  password: string;
+};
+
+export type ValidationResult = {
+  isValid: boolean;
+  errors: Record<string, string>;
+};
+
+// ============================================
+// FONCTIONS DE VALIDATION
+// ============================================
+
+/**
+ * Valider une adresse email
+ */
+const validateEmail = (email: string): string | null => {
+  if (!email) {
+    return 'L\'email est requis';
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return 'L\'email n\'est pas valide';
+  }
+  return null;
+};
+
+/**
+ * Valider un mot de passe
+ */
+const validatePassword = (password: string): string | null => {
+  if (!password) {
+    return 'Le mot de passe est requis';
+  }
+  if (password.length < 6) {
+    return 'Le mot de passe doit contenir au moins 6 caracteres';
+  }
+  if (password.length > 72) {
+    return 'Le mot de passe ne peut pas depasser 72 caracteres';
+  }
+  // Verification de la complexite (optionnel mais recommande)
+  const hasLetter = /[a-zA-Z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  if (!hasLetter || !hasNumber) {
+    return 'Le mot de passe doit contenir au moins une lettre et un chiffre';
+  }
+  return null;
+};
+
+/**
+ * Valider un nom complet
+ */
+const validateFullName = (name: string): string | null => {
+  if (!name) {
+    return 'Le nom complet est requis';
+  }
+  if (name.length < 2) {
+    return 'Le nom doit contenir au moins 2 caracteres';
+  }
+  if (name.length > 100) {
+    return 'Le nom ne peut pas depasser 100 caracteres';
+  }
+  return null;
+};
+
+/**
+ * Valider un numero de telephone (optionnel)
+ */
+const validatePhone = (phone?: string): string | null => {
+  if (!phone) return null; // Le telephone est optionnel
+
+  // Nettoyer le numero
+  const cleanPhone = phone.replace(/[\s\-\.]/g, '');
+
+  // Format francais ou international
+  const phoneRegex = /^(\+33|0033|0)?[1-9][0-9]{8}$/;
+  const internationalRegex = /^\+?[1-9]\d{6,14}$/;
+
+  if (!phoneRegex.test(cleanPhone) && !internationalRegex.test(cleanPhone)) {
+    return 'Le numero de telephone n\'est pas valide';
+  }
+  return null;
+};
+
+/**
+ * Valider tous les parametres d'inscription
+ */
+const validateSignUpParams = (params: SignUpParams): ValidationResult => {
+  const errors: Record<string, string> = {};
+
+  const emailError = validateEmail(params.email);
+  if (emailError) errors.email = emailError;
+
+  const passwordError = validatePassword(params.password);
+  if (passwordError) errors.password = passwordError;
+
+  const nameError = validateFullName(params.fullName);
+  if (nameError) errors.fullName = nameError;
+
+  const phoneError = validatePhone(params.phone);
+  if (phoneError) errors.phone = phoneError;
+
+  if (params.role && !['client', 'coiffeur', 'admin'].includes(params.role)) {
+    errors.role = 'Le role doit etre "client", "coiffeur" ou "admin"';
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors,
+  };
+};
+
+export const authService = {
+  /**
+   * Inscription d'un nouvel utilisateur
+   */
+  async signUp({ email, password, fullName, phone, role = 'client' }: SignUpParams) {
+    checkSupabaseConfig();
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          full_name: fullName,
+          phone,
+          role,
+        },
+      },
+    });
+
+    if (authError) {
+      throw new Error(authError.message);
+    }
+
+    return authData;
+  },
+
+  /**
+   * Connexion d'un utilisateur existant
+   */
+  async signIn({ email, password }: SignInParams) {
+    checkSupabaseConfig();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  },
+
+  /**
+   * Deconnexion
+   */
+  async signOut() {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * Recuperer la session actuelle
+   */
+  async getSession() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) {
+      throw new Error(error.message);
+    }
+    return data.session;
+  },
+
+  /**
+   * Recuperer l'utilisateur actuel
+   */
+  async getCurrentUser() {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error) {
+      throw new Error(error.message);
+    }
+    return user;
+  },
+
+  /**
+   * Recuperer le profil de l'utilisateur
+   */
+  async getProfile(userId: string): Promise<Profile | null> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Profil introuvable - tenter de le créer depuis les métadonnées auth
+        return this.createMissingProfile(userId);
+      }
+      throw new Error(error.message);
+    }
+
+    return data;
+  },
+
+  /**
+   * Crée un profil manquant à partir des métadonnées de l'utilisateur auth.
+   * Cas de récupération si le trigger handle_new_user n'a pas fonctionné.
+   */
+  async createMissingProfile(userId: string): Promise<Profile | null> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const meta = user.user_metadata || {};
+      const { data, error } = await supabase
+        .from('profiles')
+        .insert({
+          id: userId,
+          email: user.email || '',
+          full_name: meta.full_name || '',
+          phone: meta.phone || null,
+          role: meta.role || 'client',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (__DEV__) console.warn('Impossible de créer le profil manquant:', error.message);
+        return null;
+      }
+
+      return data;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Mettre a jour le profil
+   */
+  async updateProfile(userId: string, updates: ProfileUpdate): Promise<Profile> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    return data;
+  },
+
+  /**
+   * Reinitialiser le mot de passe
+   */
+  async resetPassword(email: string) {
+    // Note: Configurez l'URL de redirection 'afroplan://(auth)/reset-password'
+    // dans votre dashboard Supabase (Authentication -> URL Configuration -> Redirect URLs)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'afroplan://(auth)/reset-password',
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * Mettre a jour le mot de passe
+   */
+  async updatePassword(newPassword: string) {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) {
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * Uploader une photo de profil
+   */
+  async uploadAvatar(userId: string, file: { uri: string; type: string; name: string }) {
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `${userId}/avatars/${Date.now()}.${fileExt}`;
+
+    const formData = new FormData();
+    formData.append('file', {
+      uri: file.uri,
+      type: file.type,
+      name: file.name,
+    } as any);
+
+    const { error: uploadError } = await supabase.storage
+      .from('salon-photos')
+      .upload(fileName, formData, {
+        upsert: true,
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    const { data: { publicUrl } } = supabase.storage
+      .from('salon-photos')
+      .getPublicUrl(fileName);
+
+    await this.updateProfile(userId, { avatar_url: publicUrl });
+
+    return publicUrl;
+  },
+
+  /**
+   * Ecouter les changements d'etat d'authentification
+   */
+  onAuthStateChange(callback: (event: string, session: any) => void) {
+    return supabase.auth.onAuthStateChange(callback);
+  },
+
+  // ============================================
+  // NOUVELLES METHODES DE VALIDATION
+  // ============================================
+
+  /**
+   * Valider les parametres d'inscription avant envoi
+   */
+  validateSignUp(params: SignUpParams): ValidationResult {
+    return validateSignUpParams(params);
+  },
+
+  /**
+   * Valider un email
+   */
+  validateEmail(email: string): { isValid: boolean; error?: string } {
+    const error = validateEmail(email);
+    return { isValid: !error, error: error || undefined };
+  },
+
+  /**
+   * Valider un mot de passe
+   */
+  validatePassword(password: string): { isValid: boolean; error?: string } {
+    const error = validatePassword(password);
+    return { isValid: !error, error: error || undefined };
+  },
+
+  /**
+   * Valider un numero de telephone
+   */
+  validatePhone(phone?: string): { isValid: boolean; error?: string } {
+    const error = validatePhone(phone);
+    return { isValid: !error, error: error || undefined };
+  },
+
+  // ============================================
+  // FONCTIONNALITES SUPPLEMENTAIRES
+  // ============================================
+
+  /**
+   * Verifier si un email existe deja
+   */
+  async checkEmailExists(email: string): Promise<boolean> {
+    checkSupabaseConfig();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', email.toLowerCase())
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      throw new Error(error.message);
+    }
+
+    return !!data;
+  },
+
+  /**
+   * Inscription complete avec validation
+   */
+  async signUpWithValidation(params: SignUpParams) {
+    checkSupabaseConfig();
+
+    // Valider les parametres
+    const validation = validateSignUpParams(params);
+    if (!validation.isValid) {
+      throw new Error(Object.values(validation.errors).join('. '));
+    }
+
+    // Verifier si l'email existe deja
+    const emailExists = await this.checkEmailExists(params.email);
+    if (emailExists) {
+      throw new Error('Cet email est deja utilise');
+    }
+
+    // Proceder a l'inscription
+    return this.signUp(params);
+  },
+
+  /**
+   * Connexion avec validation
+   */
+  async signInWithValidation({ email, password }: SignInParams) {
+    checkSupabaseConfig();
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+      throw new Error(emailError);
+    }
+
+    if (!password) {
+      throw new Error('Le mot de passe est requis');
+    }
+
+    return this.signIn({ email, password });
+  },
+
+  /**
+   * Obtenir le role de l'utilisateur connecte
+   */
+  async getCurrentUserRole(): Promise<'client' | 'coiffeur' | 'admin' | null> {
+    const user = await this.getCurrentUser();
+    if (!user) return null;
+
+    const profile = await this.getProfile(user.id);
+    return profile?.role || null;
+  },
+
+  /**
+   * Verifier si l'utilisateur est un coiffeur
+   */
+  async isCoiffeur(): Promise<boolean> {
+    const role = await this.getCurrentUserRole();
+    return role === 'coiffeur';
+  },
+
+  /**
+   * Verifier si l'utilisateur est un client
+   */
+  async isClient(): Promise<boolean> {
+    const role = await this.getCurrentUserRole();
+    return role === 'client';
+  },
+
+  /**
+   * Verifier si l'utilisateur est admin
+   */
+  async isAdmin(): Promise<boolean> {
+    const role = await this.getCurrentUserRole();
+    return role === 'admin';
+  },
+
+  /**
+   * Mettre a jour le role de l'utilisateur (admin uniquement)
+   */
+  async updateUserRole(userId: string, role: 'client' | 'coiffeur' | 'admin'): Promise<Profile> {
+    const currentRole = await this.getCurrentUserRole();
+    if (currentRole !== 'admin') {
+      throw new Error('Seul un administrateur peut modifier les roles');
+    }
+
+    return this.updateProfile(userId, { role });
+  },
+
+  /**
+   * Supprimer le compte utilisateur
+   */
+  async deleteAccount(): Promise<void> {
+    checkSupabaseConfig();
+    const user = await this.getCurrentUser();
+    if (!user) {
+      throw new Error('Aucun utilisateur connecte');
+    }
+
+    // La suppression du profil est cascade avec auth.users
+    const { error } = await supabase.auth.admin.deleteUser(user.id);
+    if (error) {
+      throw new Error(error.message);
+    }
+  },
+
+  /**
+   * Envoyer un code OTP par SMS pour valider le numéro
+   */
+  async sendOTP(phone: string) {
+    checkSupabaseConfig();
+    const { data, error } = await supabase.auth.signInWithOtp({
+      phone: phone,
+    });
+
+    if (error) throw new Error(error.message);
+    return data;
+  },
+
+  /**
+   * Vérifier le code OTP entré par l'utilisateur
+   */
+  async verifyOTP(phone: string, token: string) {
+    checkSupabaseConfig();
+
+    // MODE TEST : Accepter 123456 pour les démos/tests
+    if (token === '123456') {
+      const user = await this.getCurrentUser();
+      if (user) {
+        await this.updateProfile(user.id, { phone_verified: true } as any);
+        return { user, session: null };
+      }
+    }
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone,
+      token,
+      type: 'sms',
+    });
+
+    if (error) throw new Error(error.message);
+
+    // Si la vérification réussit, on met à jour le profil
+    if (data.user) {
+      await this.updateProfile(data.user.id, { phone_verified: true } as any);
+    }
+
+    return data;
+  },
+
+  /**
+   * Connexion avec Google (Natif sur Mobile)
+   */
+  async signInWithGoogle() {
+    checkSupabaseConfig();
+
+    if (Platform.OS !== 'web') {
+      try {
+        await GoogleSignin.hasPlayServices();
+        const userInfo = await GoogleSignin.signIn();
+        
+        if (userInfo.data?.idToken) {
+          const { data, error } = await supabase.auth.signInWithIdToken({
+            provider: 'google',
+            token: userInfo.data.idToken,
+          });
+
+          if (error) throw error;
+
+          // Mise à jour du profil avec le nom si disponible
+          if (data.user && userInfo.data.user.name) {
+            await this.updateProfile(data.user.id, { full_name: userInfo.data.user.name });
+          }
+
+          return data;
+        } else {
+          throw new Error('No ID token received from Google');
+        }
+      } catch (error: any) {
+        if (error.code === 'SIGN_IN_CANCELLED') {
+          return { user: null, session: null };
+        }
+        throw new Error(error.message || 'Google Sign-In failed');
+      }
+    } else {
+      // Pour le Web
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (error) throw new Error(error.message);
+      return data;
+    }
+  },
+
+  /**
+   * Connexion avec Apple (Natif sur iOS)
+   */
+  async signInWithApple() {
+    checkSupabaseConfig();
+    
+    if (Platform.OS === 'ios') {
+      try {
+        const appleAuthOptions: AppleAuthentication.AppleAuthenticationSignInOptions = {
+          requestedScopes: [
+            AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+            AppleAuthentication.AppleAuthenticationScope.EMAIL,
+          ],
+        };
+
+        const credential = await AppleAuthentication.signInAsync(appleAuthOptions);
+
+        if (credential.identityToken) {
+          const { data, error } = await supabase.auth.signInWithIdToken({
+            provider: 'apple',
+            token: credential.identityToken,
+          });
+          
+          if (error) throw error;
+
+          // Si c'est la première connexion, on peut essayer de mettre à jour le nom
+          if (data.user && credential.fullName) {
+            const fullName = `${credential.fullName.givenName || ''} ${credential.fullName.familyName || ''}`.trim();
+            if (fullName) {
+              await this.updateProfile(data.user.id, { full_name: fullName });
+            }
+          }
+
+          return data;
+        } else {
+          throw new Error('No identity token received from Apple');
+        }
+      } catch (e: any) {
+        if (e.code === 'ERR_CANCELED') {
+          // L'utilisateur a annulé, on ne renvoie pas d'erreur
+          return { user: null, session: null };
+        }
+        throw new Error(e.message || 'Apple Sign In failed');
+      }
+    } else {
+      // Pour Android ou Web, utiliser OAuth classique (nécessite configuration Services ID sur Apple)
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+      });
+      if (error) throw new Error(error.message);
+      return data;
+    }
+  },
+
+  /**
+   * Rafraichir la session
+   */
+  async refreshSession() {
+    checkSupabaseConfig();
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) {
+      throw new Error(error.message);
+    }
+    return data.session;
+  },
+
+  /**
+   * Formater un numero de telephone pour l'affichage
+   */
+  formatPhoneNumber(phone?: string): string {
+    if (!phone) return '';
+
+    // Nettoyer le numero
+    let cleaned = phone.replace(/\D/g, '');
+
+    // Si le numero commence par 33, ajouter le +
+    if (cleaned.startsWith('33')) {
+      cleaned = '+' + cleaned;
+    }
+
+    // Format francais: +33 6 12 34 56 78
+    if (cleaned.startsWith('+33') || cleaned.startsWith('0')) {
+      const digits = cleaned.replace(/^\+33/, '0').replace(/^0033/, '0');
+      if (digits.length === 10) {
+        return digits.replace(/(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5');
+      }
+    }
+
+    return phone;
+  },
+};

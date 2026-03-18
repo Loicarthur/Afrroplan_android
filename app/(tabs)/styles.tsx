@@ -1,0 +1,548 @@
+/**
+ * Styles de Coiffure AfroPlan
+ * Hierarchie: Grand titre = catégorie / Sous-titre = style spécifique
+ * Cliquer sur un style → coiffeurs à proximité spécialisés
+ */
+
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Dimensions,
+  StatusBar,
+  Platform,
+  Alert,
+  Modal,
+  TextInput,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
+import { router } from 'expo-router';
+import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
+import * as ImagePicker from 'expo-image-picker';
+
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Colors, Spacing, BorderRadius, FontSizes } from '@/constants/theme';
+import { HAIRSTYLE_CATEGORIES } from '@/constants/hairstyleCategories';
+import { Button } from '@/components/ui';
+
+const { width } = Dimensions.get('window');
+const STYLE_CARD_WIDTH = (width - 52) / 2;
+
+export default function StylesScreen() {
+  const colorScheme = useColorScheme();
+  const colors = Colors[colorScheme ?? 'light'];
+
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(
+    HAIRSTYLE_CATEGORIES[0]?.id ?? null
+  );
+
+  // États pour l'ajout de style personnalisé
+  const [addModalVisible, setAddModalVisible] = useState(false);
+  const [selectedCategoryForAdd, setSelectedCategoryForAdd] = useState<string | null>(null);
+  const [newStyleName, setNewStyleName] = useState('');
+  const [newStyleImage, setNewStyleImage] = useState<string | null>(null);
+  const [isSubmitting, setIsSaving] = useState(false);
+
+  const toggleCategory = (categoryId: string) => {
+    setExpandedCategory((prev) => (prev === categoryId ? null : categoryId));
+  };
+
+  const handlePickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setNewStyleImage(result.assets[0].uri);
+    }
+  };
+
+  const handleSubmitStyle = () => {
+    if (!newStyleName || !newStyleImage) {
+      Alert.alert('Champs requis', 'Veuillez ajouter une photo et un nom pour ce style.');
+      return;
+    }
+
+    setIsSaving(true);
+    // Simulation d'envoi à Supabase/Admin
+    setTimeout(() => {
+      setIsSaving(false);
+      setAddModalVisible(false);
+      setNewStyleName('');
+      setNewStyleImage(null);
+      Alert.alert(
+        'Merci !',
+        'Votre style a été envoyé pour validation. Il apparaîtra bientôt dans le catalogue après vérification par notre équipe.'
+      );
+    }, 1500);
+  };
+
+  const handleStylePress = (styleId: string, styleName: string) => {
+    router.push({
+      pathname: '/style-salons/[styleId]',
+      params: { styleId, styleName },
+    });
+  };
+
+  return (
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]} edges={['top']}>
+      <StatusBar barStyle="dark-content" />
+
+      {/* Header */}
+      <Animated.View entering={FadeInDown.delay(50).duration(400)} style={styles.header}>
+        <Text style={[styles.title, { color: colors.text }]}>Styles de coiffure</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
+          Choisissez un style pour trouver le bon coiffeur
+        </Text>
+      </Animated.View>
+
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {HAIRSTYLE_CATEGORIES.map((category, catIndex) => {
+          const isExpanded = expandedCategory === category.id;
+
+          return (
+            <Animated.View
+              key={category.id}
+              entering={FadeInUp.delay(catIndex * 60).duration(400)}
+              style={[styles.categorySection, { backgroundColor: colors.card }]}
+            >
+              {/* Category header — tap to expand/collapse */}
+              <TouchableOpacity
+                style={styles.categoryHeader}
+                onPress={() => toggleCategory(category.id)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.categoryLeft}>
+                  <View style={styles.categoryTitleBlock}>
+                    <Text style={[styles.categoryNumber, { color: colors.textMuted }]}>
+                      {category.number}
+                    </Text>
+                    <Text
+                      style={[styles.categoryTitle, { color: colors.text }]}
+                      numberOfLines={2}
+                    >
+                      {category.title}
+                    </Text>
+                    <Text style={[styles.categoryCount, { color: colors.textMuted }]}>
+                      {category.styles.length} style{category.styles.length > 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons
+                  name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color={colors.textMuted}
+                />
+              </TouchableOpacity>
+
+              {/* Sub-styles grid — visible when expanded */}
+              {isExpanded && (
+                <View style={styles.stylesGrid}>
+                  {category.styles.map((style) => (
+                    <TouchableOpacity
+                      key={style.id}
+                      style={[styles.styleCard, { backgroundColor: colors.background }]}
+                      onPress={() => handleStylePress(style.id, style.name)}
+                      activeOpacity={0.85}
+                    >
+                      <View style={styles.styleImageWrapper}>
+                        <Image
+                          source={style.image}
+                          style={styles.styleImage}
+                          contentFit="cover"
+                        />
+                        {/* Colored overlay stripe */}
+                        <View
+                          style={[styles.styleColorBar, { backgroundColor: category.color }]}
+                        />
+                        {/* Arrow CTA */}
+                        <View style={[styles.styleArrow, { backgroundColor: category.color }]}>
+                          <Ionicons name="arrow-forward" size={14} color="#FFFFFF" />
+                        </View>
+                      </View>
+                      <View style={styles.styleInfo}>
+                        <Text
+                          style={[styles.styleName, { color: colors.text }]}
+                          numberOfLines={2}
+                        >
+                          {style.name}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+
+                  {/* Carte "Ajouter un style" */}
+                  <TouchableOpacity
+                    style={[styles.styleCard, styles.addStyleCard, { borderColor: category.color + '40' }]}
+                    onPress={() => {
+                      setSelectedCategoryForAdd(category.id);
+                      setAddModalVisible(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={[styles.addStyleIconContainer, { backgroundColor: category.color + '15' }]}>
+                      <Ionicons name="add" size={32} color={category.color} />
+                    </View>
+                    <Text style={[styles.addStyleText, { color: category.color }]}>Ajouter un style</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {/* Collapsed preview — show 3 style names */}
+              {!isExpanded && (
+                <View style={styles.collapsedPreview}>
+                  {category.styles.slice(0, 3).map((s, i) => (
+                    <View
+                      key={s.id}
+                      style={[
+                        styles.collapsedTag,
+                        { backgroundColor: category.color + '15', borderColor: category.color + '40' },
+                      ]}
+                    >
+                      <Text style={[styles.collapsedTagText, { color: category.color }]}>
+                        {s.name}
+                      </Text>
+                    </View>
+                  ))}
+                  {category.styles.length > 3 && (
+                    <View
+                      style={[
+                        styles.collapsedTag,
+                        { backgroundColor: colors.backgroundSecondary, borderColor: colors.border },
+                      ]}
+                    >
+                      <Text style={[styles.collapsedTagText, { color: colors.textMuted }]}>
+                        +{category.styles.length - 3}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+            </Animated.View>
+          );
+        })}
+
+        {/* Bottom padding */}
+        <View style={{ height: 110 }} />
+      </ScrollView>
+
+      {/* Modal Ajouter un style */}
+      <Modal
+        visible={addModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAddModalVisible(false)}
+      >
+        <View style={[styles.modalContainer, { backgroundColor: colors.background }]}>
+          <View style={[styles.modalHeader, { borderBottomColor: colors.border }]}>
+            <TouchableOpacity onPress={() => setAddModalVisible(false)}>
+              <Ionicons name="close" size={24} color={colors.text} />
+            </TouchableOpacity>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>Suggérer un style</Text>
+            <View style={{ width: 24 }} />
+          </View>
+
+          <ScrollView style={styles.modalContent} keyboardShouldPersistTaps="handled">
+            <Text style={[styles.modalLabel, { color: colors.text }]}>Photo de l&apos;inspiration *</Text>
+            <TouchableOpacity 
+              style={[styles.imagePicker, { backgroundColor: colors.card, borderColor: colors.border }]} 
+              onPress={handlePickImage}
+            >
+              {newStyleImage ? (
+                <Image source={{ uri: newStyleImage }} style={styles.pickedImage} />
+              ) : (
+                <View style={styles.pickerPlaceholder}>
+                  <Ionicons name="camera" size={40} color={colors.textMuted} />
+                  <Text style={{ color: colors.textMuted, marginTop: 8 }}>Prendre ou choisir une photo</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+
+            <Text style={[styles.modalLabel, { color: colors.text, marginTop: 24 }]}>Nom du style *</Text>
+            <TextInput
+              style={[styles.modalInput, { backgroundColor: colors.card, color: colors.text, borderColor: colors.border }]}
+              placeholder="Ex: Tresses papillon perle"
+              placeholderTextColor={colors.textMuted}
+              value={newStyleName}
+              onChangeText={setNewStyleName}
+            />
+
+            <View style={[styles.infoBox, { backgroundColor: colors.primary + '10', borderColor: colors.primary + '30' }]}>
+              <Ionicons name="information-circle" size={20} color={colors.primary} />
+              <Text style={[styles.infoText, { color: colors.textSecondary }]}>
+                Chaque style envoyé est vérifié par nos administrateurs avant d&apos;être visible pour tous les utilisateurs.
+              </Text>
+            </View>
+
+            <Button
+              title="Envoyer le style"
+              onPress={handleSubmitStyle}
+              loading={isSubmitting}
+              style={{ marginTop: 32 }}
+            />
+          </ScrollView>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 13,
+  },
+  scrollContent: {
+    paddingHorizontal: 16,
+    gap: 12,
+  },
+
+  // Category card
+  categorySection: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 6,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  categoryHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+  },
+  categoryLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  categoryColorDot: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryEmoji: {
+    fontSize: 26,
+  },
+  categoryTitleBlock: {
+    flex: 1,
+  },
+  categoryNumber: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginBottom: 1,
+  },
+  categoryTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  categoryCount: {
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  // Collapsed preview tags
+  collapsedPreview: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 16,
+    paddingBottom: 14,
+    gap: 6,
+  },
+  collapsedTag: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  collapsedTagText: {
+    fontSize: 11,
+    fontWeight: '500',
+  },
+
+  // Style cards grid
+  stylesGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: 12,
+    paddingBottom: 14,
+    gap: 10,
+  },
+  styleCard: {
+    width: STYLE_CARD_WIDTH,
+    borderRadius: 12,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 4,
+      },
+      android: { elevation: 1 },
+    }),
+  },
+  styleImageWrapper: {
+    position: 'relative',
+    height: 130,
+  },
+  styleImage: {
+    width: '100%',
+    height: '100%',
+  },
+  styleColorBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+  },
+  styleArrow: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  styleInfo: {
+    padding: 10,
+  },
+  styleName: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 4,
+    lineHeight: 17,
+  },
+  stylePrice: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginBottom: 3,
+  },
+  styleDurationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  styleDuration: {
+    fontSize: 11,
+  },
+
+  // Add style card
+  addStyleCard: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    height: 215,
+  },
+  addStyleIconContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  addStyleText: {
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  modalContent: {
+    padding: 24,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  imagePicker: {
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    overflow: 'hidden',
+  },
+  pickedImage: {
+    width: '100%',
+    height: '100%',
+  },
+  pickerPlaceholder: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalInput: {
+    width: '100%',
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    fontSize: 16,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 24,
+    gap: 12,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+});
